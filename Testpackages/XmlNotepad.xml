@@ -1,0 +1,6 @@
+<package>
+	<msi>XmlNotepad.msi</msi>
+	<Install>/qb /I</Install>
+	<Remove>/qb /X</Remove>
+	<DetectInstall>HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{FC7BACF0-1FFA-4605-B3B4-A66AB382752D}</DetectInstall>
+</package>

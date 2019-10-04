@@ -1,7 +1,7 @@
-
 #PackageManagement in the PowerShell Gallery
 #https://www.powershellgallery.com/packages/PackageManagement
 #PackageManagement is a new way to discover and install software packages from around the web.
+# Andreas Nick 2019
 
 #$PSScriptRoot not working in VSCode or ISE
 $Script:PathToScript = $null
@@ -25,16 +25,19 @@ Get-Command -Module PackageManagement
 
 <#
 
-    Cmdlet          Get-PackageProvider                                
-    Cmdlet          Get-PackageSource                                  
-    Cmdlet          Import-PackageProvider                             
-    Cmdlet          Install-Package                                    
-    Cmdlet          Install-PackageProvider                            
-    Cmdlet          Register-PackageSource                             
-    Cmdlet          Save-Package                                       
-    Cmdlet          Set-PackageSource                                  
-    Cmdlet          Uninstall-Package                                  
-    Cmdlet          Unregister-PackageSource                           
+Cmdlet          Find-Package                                       1.0.0.1    PackageManagement
+Cmdlet          Find-PackageProvider                               1.0.0.1    PackageManagement
+Cmdlet          Get-Package                                        1.0.0.1    PackageManagement
+Cmdlet          Get-PackageProvider                                1.0.0.1    PackageManagement
+Cmdlet          Get-PackageSource                                  1.0.0.1    PackageManagement
+Cmdlet          Import-PackageProvider                             1.0.0.1    PackageManagement
+Cmdlet          Install-Package                                    1.0.0.1    PackageManagement
+Cmdlet          Install-PackageProvider                            1.0.0.1    PackageManagement
+Cmdlet          Register-PackageSource                             1.0.0.1    PackageManagement
+Cmdlet          Save-Package                                       1.0.0.1    PackageManagement
+Cmdlet          Set-PackageSource                                  1.0.0.1    PackageManagement
+Cmdlet          Uninstall-Package                                  1.0.0.1    PackageManagement
+Cmdlet          Unregister-PackageSource                           1.0.0.1    PackageManagement                        
 
 
 #>
@@ -91,7 +94,6 @@ Get-Package  -Provider msi | Uninstall-Package
 #provided in different ways. For example, there is a Chocolatey provider 
 # that specifies the Choco website as the source.
 get-packagesource
-
 <#
 Name                             ProviderName     IsTrusted  Location
 ----                             ------------     ---------  --------
@@ -99,7 +101,22 @@ nuget.org                        NuGet            False      https://api.nuget.o
 PSGallery                        PowerShellGet    False      https://www.powershellgallery.com/api/v2/
 #>
 
-#rv * -ea SilentlyContinue; rmo *; $error.Clear(); cls
+
+#
+#
+# With ChocolateyGet!
+#
+#
+Install-PackageProvider ChocolateyGet -verbose
+Import-PackageProvider ChocolateyGet
+get-PackageProvider
+find-package -ProviderName ChocolateyGet -name firefox*
+install-package -name 7zip -verbose -ProviderName ChocolateyGet
+Find-Package -ProviderName ChocolateyGet -name 7Zip -verbose | Install-Package
+
+
+
+#Remove-Variable * -ea SilentlyContinue; Remove-Module *; $error.Clear(); Clear-Host
 
 #Own PackageProvider
 $env:PSModulePath = $env:PSModulePath + "; $PathToScript\SimplePackageProvider"
@@ -108,12 +125,27 @@ Get-PackageProvider
 Get-PackageSource
 
 Register-PackageSource -Name "MyRepo" -Location $( $PathToScript + '\Testpackages') -ProviderName "SimplePackageProvider" -verbose
-Get-PackageSource -Name "MyRepo" | Unregister-PackageSource -Verbose
+Get-PackageSource
 
-Find-Package -name "X*" -ProviderName "SimplePackageProvider" -Verbose 
+#Get-PackageSource -Name "MyRepo" | Unregister-PackageSource -Verbose
+
+Find-Package -name "*" -ProviderName "SimplePackageProvider" -Verbose 
+#Find-Package -name "X*" -ProviderName "SimplePackageProvider" -Verbose 
 
 #confirm:$false and -force remove the user prompt
-Find-Package -name "X*" -ProviderName "SimplePackageProvider" -Verbose | Install-Package -Confirm:$false -Verbose -Force 
+Find-Package -name "o*" -ProviderName "SimplePackageProvider" -Verbose | Install-Package -Confirm:$false -Verbose -Force 
+
+Install-Package -Name Orca-x86_en-us.xml  -Confirm:$false -Verbose -Force #Without Provider 
+
+Install-Package -Name Orca-x86_en-us.xml  -Confirm:$false -Verbose -Force -ProviderName  "SimplePackageProvider"
+
+Find-Package -name "o*" -ProviderName "SimplePackageProvider"  | Install-Package -Confirm:$false -Force -Verbose
+Find-Package -name "F*" -ProviderName "SimplePackageProvider"  | Install-Package -Confirm:$false -Force -Verbose
+Find-Package -name "XmlNotepad*" -ProviderName "SimplePackageProvider"  | Install-Package -Confirm:$false -Force -Verbose
+
+#Install all packages
+
+Find-Package * -ProviderName "SimplePackageProvider"  | Install-Package -Confirm:$false -Force -Verbose
 
 
-
+get-Package -name * -ProviderName SimplePackageProvider -Verbose 

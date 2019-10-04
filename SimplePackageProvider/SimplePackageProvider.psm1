@@ -1,4 +1,4 @@
-<#
+ <#
     Das Grundgerüst stammt aus dem Microsoft Beispiel MyAdlbum
     https://www.powershellgallery.com/packages/MyAlbum
 #>
@@ -7,20 +7,15 @@
 $script:ProviderName = "SimplePackageProvider"
 
 # The folder where stores the provider configuration file
-$script:LocalPath = "$env:LOCALAPPDATA\Contoso\$script:ProviderName"
-[Hashtable] $script:RegisteredPackageSources = $null    
-$script:RegisteredPackageSourcesFilePath = Microsoft.PowerShell.Management\Join-Path -Path $script:LocalPath -ChildPath "MyAlbumPackageSource.xml"
+[Hashtable] $script:RegisteredPackageSources = $null    #All Source Pathes
 
 # Wildcard pattern matching configuration
-$script:wildcardOptions = [System.Management.Automation.WildcardOptions]::CultureInvariant -bor `
-    [System.Management.Automation.WildcardOptions]::IgnoreCase
-
+$script:wildcardOptions = [System.Management.Automation.WildcardOptions]::CultureInvariant -bor [System.Management.Automation.WildcardOptions]::IgnoreCase
 
 <#
 .SYNOPSIS
 Mandatory function for the PackageManagement providers. It returns the name of your provider.
 #>
-
 function Get-PackageProviderName { 
     return $script:ProviderName
 }
@@ -29,7 +24,6 @@ function Get-PackageProviderName {
 .SYNOPSIS
 Mandatory function for the PackageManagement providers. It initializes your provider before performing any actions.
 #>
-
 function Initialize-Provider { 
 
     Write-Verbose $('Initialize-Provider')
@@ -41,6 +35,7 @@ function Initialize-Provider {
 .SYNOPSIS
 Optional function that gets called when the user is registering a package source
 #>
+
 function Add-PackageSource {
     [CmdletBinding()]
     param
@@ -55,7 +50,7 @@ function Add-PackageSource {
         $Trusted
     )     
     
-    Write-Verbose ('Add-PackageSource')
+    Write-Verbose $('Add-PackageSource ' + $Name)
     #ToDo validate Parameter
     $packageSource = Microsoft.PowerShell.Utility\New-Object PSCustomObject -Property ([ordered]@{
             Name               = $Name
@@ -68,6 +63,7 @@ function Add-PackageSource {
     $script:RegisteredPackageSources.Add($Name, $packageSource)
     #Write-Verbose $("OUT---> " + $script:RegisteredPackageSources[$Name] )
     Write-Verbose $($Name + " " + $Location)
+
     Write-Output -InputObject (New-PackageSourceAndYield -Source $packageSource)
 }
 
@@ -145,8 +141,31 @@ function Resolve-PackageSource {
     }
 }
 
-# Optional function that finds packages by given name and version information. 
-# It is required to implement this function for the providers that support find-package. For example, find-package -ProviderName  MyAlbum -Source demo.
+<#
+.SYNOPSIS
+finds packages by given name and version information. 
+
+.DESCRIPTION
+ Optional function that finds packages by given name and version information. 
+ It is required to implement this function for the providers that support find-package. For example, find-package -ProviderName  MyAlbum -Source demo.
+
+
+.PARAMETER name
+
+
+.PARAMETER requiredVersion
+
+.PARAMETER minimumVersion
+
+.PARAMETER maximumVersion
+
+.EXAMPLE
+An example
+
+.NOTES
+General notes
+#>
+
 function Find-Package { 
     param(
         [string] $name,
@@ -181,13 +200,30 @@ function Find-Package {
                 Name                 = $item.name;
                 Version              = "1.0.0.0";
                 versionScheme        = "MultiPartNumeric";
-                Source               = $Directory;         
+                Source               = Join-Path $Directory -ChildPath $item.name;         
             }
             $sid = New-SoftwareIdentity @swidObject              
             Write-Output -InputObject $sid   
         }
     }
 }
+
+<#
+.SYNOPSIS
+Install a Package
+
+.DESCRIPTION
+Install a PackageManager Package
+
+.PARAMETER fastPackageReference
+
+
+.EXAMPLE
+
+
+.NOTES
+
+#>
 
 function Install-Package { 
     [CmdletBinding()]
@@ -199,13 +235,78 @@ function Install-Package {
         $fastPackageReference
     )
 
-    Write-Verbose $('Install-Package')
-    <#
-    Write-Debug -Message ($LocalizedData.FastPackageReference -f $fastPackageReference)
-    $path = Get-Path -Request $request
+    Write-Verbose $('Install-Package ' + $fastPackageReference)
     
-    #>
+    if ($script:RegisteredPackageSources.count -eq 0) {
+        Write-Verbose "No package source directory in the repository"
+        return
+    }
+    $InstallXML = $null
+    $Packagepath = ""
+    foreach ($Source in $script:RegisteredPackageSources.Values) {
+        $Directory = $Source.SourceLocation
+        if (Test-Path (Join-Path $Directory -ChildPath $fastPackageReference)) {
+            $InstallXML = New-Object xml
+            $InstallXML.Load((Join-Path $Directory -ChildPath $fastPackageReference))
+            $Packagepath = $Directory 
+            break #one is enough
+        }
+    }
+    #Is already installed?
+    if (Test-Path $InstallXML.package.DetectInstall) {
+        Write-Warning $('The Package' + $fastPackageReference + " is already installed - abort")
+
+    }
+    else {
+        if ($null -ne $InstallXML ) {
+
+            $Parameter = $InstallXML.package.Install
+            $msifilepath = $Packagepath + "\packages\" + $InstallXML.package.msi
+            if (-not (Test-Path $msifilepath)) {
+                Write-Error "msi Package $msifilepath not found"
+                break;       
+            }
+            $DataStamp = get-date -Format yyyyMMddTHHmmss
+            $logFile = $("$env:temp" + ('\{0}-{1}.log' -f $file.fullname, $DataStamp))
+            $MSIArguments = @("/norestart", "/L*v", $logFile, $Parameter, $msifilepath)
+        
+            Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow 
+            #ToDo: Errorhandling
+            if (-not (Test-Path $InstallXML.package.DetectInstall)) {
+                Write-Error $('Error: The Package' + $fastPackageReference + " is not installed")
+            }
+        }
+    }
+    $swidObject = @{
+        FastPackageReference = $fastPackageReference;
+        Name                 = $fastPackageReference;
+        Version              = "1.0.0.0"; #need Detect Version or version in the xml
+        versionScheme        = "MultiPartNumeric";              
+        summary              = "Summary"; 
+        Source               = Join-Path $Directory -ChildPath $fastPackageReference      
+    }
+    #Write-Verbose "$fastPackageReference"
+    $swidTag = New-SoftwareIdentity @swidObject
+    Write-Output -InputObject $swidTag
+    
 }
+
+<#
+.SYNOPSIS
+Uninstall a Package
+
+.DESCRIPTION
+
+
+.PARAMETER fastPackageReference
+
+
+.EXAMPLE
+
+
+.NOTES
+
+#>
 
 function UnInstall-Package { 
     [CmdletBinding()]
@@ -217,34 +318,88 @@ function UnInstall-Package {
         $fastPackageReference
     )
 
-    Write-Verbpse $('Uninstall-Package')
-    Write-Verbose $fastPackageReference
-    $fileFullName = $fastPackageReference
-
-    <#
-    if(Test-Path -Path $fileFullName)
-    {
-        Remove-Item $fileFullName -Force -WhatIf:$false -Confirm:$false
-
-        $swidObject = @{
-            FastPackageReference = $fileFullName;                        
-            Name = [System.IO.Path]::GetFileName($fileFullName);
-            Version = New-Object System.Version ("0.1");  # Note: You need to fill in a proper package version    
-            versionScheme  = "MultiPartNumeric";              
-            summary = "Summary of your package provider"; 
-            Source =   [System.IO.Path]::GetDirectoryName($fileFullName)                             
-        }
-
-        $swidTag = New-SoftwareIdentity @swidObject
-        Write-Output -InputObject $swidTag
+    Write-Verbose $('Uninstall-Package')
+    #Search for the Package       
+    if ($script:RegisteredPackageSources.count -eq 0) {
+        Write-Verbose "No package source directory in the repository"
+        return
     }
-    #>	 
+    $InstallXML = $null
+    $Packagepath = ""
+    foreach ($Source in $script:RegisteredPackageSources.Values) {
+        $Directory = $Source.SourceLocation
+        if (Test-Path (Join-Path $Directory -ChildPath $fastPackageReference)) {
+            $InstallXML = New-Object xml
+            $InstallXML.Load((Join-Path $Directory -ChildPath $fastPackageReference))
+            $Packagepath = $Directory 
+            break #one is enough
+        }
+    }
+    
+    #Is not installed?
+    if (-not (Test-Path $InstallXML.package.DetectInstall)) {
+        Write-Warning $('The Package' + $fastPackageReference + " is not installed - abort")
+
+    }
+    else {
+        if ($null -ne $InstallXML ) {
+
+            $Parameter = $InstallXML.package.Remove
+            $msifilepath = $Packagepath + "\packages\" + $InstallXML.package.msi
+            if (-not (Test-Path $msifilepath)) {
+                Write-Error "msi Package $msifilepath not found"
+                break;       
+            }
+            $DataStamp = get-date -Format yyyyMMddTHHmmss
+            $logFile = $("$env:temp" + ('\{0}-{1}.log' -f $file.fullname, $DataStamp))
+            $MSIArguments = @("/norestart", "/L*v", $logFile, $Parameter, $msifilepath)
+        
+            Start-Process "msiexec.exe" -ArgumentList $MSIArguments -Wait -NoNewWindow 
+            #ToDo: Errorhandling
+            if (Test-Path $InstallXML.package.DetectInstall) {
+                Write-Error $('Error: The Package' + $fastPackageReference + " is not removed")
+            }
+        }
+    }
+    $swidObject = @{
+        FastPackageReference = $fastPackageReference;
+        Name                 = $fastPackageReference;
+        Version              = "1.0.0.0"; #need Detect Version or version in the xml
+        versionScheme        = "MultiPartNumeric";              
+        summary              = "Summary"; 
+        Source               = Join-Path $Directory -ChildPath $fastPackageReference      
+    }
+    #Write-Verbose "$fastPackageReference"
+    $swidTag = New-SoftwareIdentity @swidObject
+    Write-Output -InputObject $swidTag
+   
+
 }
 
 
-# Optional function that returns the packages that are installed. However it is required to implement this function for the providers 
-# that support Get-Package. It's also called during install-package.
-# For example, Get-package -Destination c:\myfolder -ProviderName MyAlbum
+#
+<#
+.SYNOPSIS
+ Returns the packages that are installed
+
+.DESCRIPTION
+ Optional function that returns the packages that are installed. However it is required to implement this function for the providers 
+ that support Get-Package. It's also called during install-package.
+ For example, Get-package -Destination c:\myfolder -ProviderName MyAlbum
+
+.PARAMETER Name
+Parameter description
+
+.PARAMETER RequiredVersion
+Parameter description
+
+.PARAMETER MinimumVersion
+Parameter description
+
+.PARAMETER MaximumVersion
+Parameter description
+#>
+
 function Get-InstalledPackage { 
     [CmdletBinding()]
     param
@@ -291,11 +446,15 @@ function Get-InstalledPackage {
                     Name                 = $item.name;
                     Version              = "1.0.0.0";
                     versionScheme        = "MultiPartNumeric";
-                    summary = "Summary of the simple package provider";
-                    Source               = $Directory;         
+                    summary              = "Summary";
+                    Source               = Join-Path $Directory -ChildPath $item.FullName;         
                 }
+                #Write-Verbose $("Detected " + $pfile.package.DetectInstall)
+
                 $sid = New-SoftwareIdentity @swidObject              
+                #Write-Verbose  $($item.name )
                 Write-Output -InputObject $sid  
+                
             }
  
         }
@@ -304,9 +463,23 @@ function Get-InstalledPackage {
 
 }
 
-#region Helper functions
-
+<#
+.SYNOPSIS
 # Find package source name from a given location
+
+.DESCRIPTION
+
+
+.PARAMETER Location
+Parameter description
+
+.EXAMPLE
+
+
+.NOTES
+
+#>
+
 function Get-SourceName {
     [CmdletBinding()]
     [OutputType("string")]
@@ -345,4 +518,4 @@ function New-PackageSourceAndYield {
     Write-Output -InputObject $src
 }
 
-#endregion
+

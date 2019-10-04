@@ -1,0 +1,6 @@
+<package>
+	<msi>Free_AppDeploy_Repackager.msi</msi>
+	<Install>/qb /I</Install>
+	<Remove>/qb /X</Remove>
+	<DetectInstall>HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{67FE7AB2-9398-4833-BB15-1118FAD19F17}</DetectInstall>
+</package>

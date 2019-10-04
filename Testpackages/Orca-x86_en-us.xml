@@ -1,0 +1,6 @@
+<package>
+	<msi>Orca-x86_en-us.msi</msi>
+	<Install>/qb /I</Install>
+	<Remove>/qb /X</Remove>
+	<DetectInstall>HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{10ED3B70-BF00-C202-9FF8-D99260EAC966}</DetectInstall>
+</package>
